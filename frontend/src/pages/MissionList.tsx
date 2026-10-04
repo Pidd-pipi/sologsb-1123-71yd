@@ -21,6 +21,7 @@ import { PlusOutlined, ReloadOutlined } from '@ant-design/icons';
 import { useMissionStore } from '../stores/missionStore';
 import { useWaypointStore } from '../stores/waypointStore';
 import { useAssetStore } from '../stores/assetStore';
+import { useSortieStore } from '../stores/sortieStore';
 import { useMissionFilter } from '../hooks/useMissionFilter';
 import MissionCard from '../components/common/MissionCard';
 import { MISSION_PURPOSES, MISSION_STATUSES, type LngLat, type MissionDraft, type MissionPurpose, type MissionStatus } from '../types/mission';
@@ -53,6 +54,7 @@ export default function MissionList() {
   const addMission = useMissionStore((s) => s.add);
   const waypoints = useWaypointStore((s) => s.items);
   const assets = useAssetStore((s) => s.items);
+  const sorties = useSortieStore((s) => s.items);
   const { filters, patch, reset, result, options } = useMissionFilter();
 
   const [open, setOpen] = useState(false);
@@ -225,6 +227,7 @@ export default function MissionList() {
                 waypointCount={row.waypointCount}
                 assetCount={row.assetCount}
                 lineCount={row.waypointCount > 1 ? 1 : 0}
+                sortieCount={sorties.filter((s) => s.missionId === row.mission.id).length}
                 footer={
                   <Space wrap size={4}>
                     <Button size="small" type="link" onClick={() => navigate(`/missions/${row.mission.id}/route`)}>

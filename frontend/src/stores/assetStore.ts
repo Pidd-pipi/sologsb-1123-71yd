@@ -10,6 +10,8 @@ interface AssetState {
   load: () => Promise<void>;
   addMany: (drafts: ImageAssetDraft[]) => Promise<ImageAsset[]>;
   update: (id: string, patch: Partial<ImageAsset>) => Promise<void>;
+  /** 仅更新内存状态（不写库），供其他 store 同步影像状态 */
+  patchState: (patches: { id: string; patch: Partial<ImageAsset> }[]) => void;
   markMany: (ids: string[], quality: ImageQuality) => Promise<void>;
   removeMany: (ids: string[]) => Promise<void>;
   byMission: (missionId: string) => ImageAsset[];
@@ -50,6 +52,15 @@ export const useAssetStore = create<AssetState>((set, get) => ({
   async update(id, patch) {
     await db.assets.update(id, patch);
     set({ items: get().items.map((it) => (it.id === id ? { ...it, ...patch } : it)) });
+  },
+  patchState(patches) {
+    const patchMap = new Map(patches.map((p) => [p.id, p.patch]));
+    set({
+      items: get().items.map((it) => {
+        const patch = patchMap.get(it.id);
+        return patch ? { ...it, ...patch } : it;
+      }),
+    });
   },
   async markMany(ids, quality) {
     for (const id of ids) {

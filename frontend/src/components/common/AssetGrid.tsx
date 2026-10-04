@@ -10,6 +10,8 @@ export interface AssetGridProps {
   onToggleAll?: (ids: string[]) => void;
   onLocate?: (asset: ImageAsset) => void;
   emptyText?: string;
+  /** 影像归属架次号（用于卡片展示） */
+  sortieNoOf?: (asset: ImageAsset) => number | string;
 }
 
 const QUALITY_COLOR: Record<ImageQuality, string> = {
@@ -30,6 +32,7 @@ export default function AssetGrid({
   onToggleAll,
   onLocate,
   emptyText = '暂无成果影像条目',
+  sortieNoOf,
 }: AssetGridProps) {
   if (assets.length === 0) {
     return <Empty description={emptyText} />;
@@ -81,6 +84,11 @@ export default function AssetGrid({
               </div>
               <Typography.Text strong style={{ display: 'block', marginTop: 6 }}>
                 {asset.imageNo}
+                {sortieNoOf ? (
+                  <Tag color="blue" style={{ marginLeft: 6 }}>
+                    第 {sortieNoOf(asset)} 架次
+                  </Tag>
+                ) : null}
               </Typography.Text>
               <Typography.Text type="secondary" style={{ fontSize: 12, display: 'block' }}>
                 GSD {asset.gsd} cm/px · 重叠 {asset.overlap}% · 倾角 {asset.tiltAngle}°

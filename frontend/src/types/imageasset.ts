@@ -23,6 +23,12 @@ export interface ImageAsset {
   quality: ImageQuality;
   /** 归档目录 */
   folder: string;
+  /** 归属架次 id（按航点范围对账后回填） */
+  sortieId?: string;
+  /** 参数变化后待复核标记 */
+  needsReview?: boolean;
+  /** 待复核原因 */
+  reviewReason?: string;
 }
 
 export type ImageAssetDraft = Omit<ImageAsset, 'id'>;

@@ -10,17 +10,23 @@ import {
   Select,
   Space,
   Statistic,
+  Table,
   Tag,
   Typography,
+  type TableProps,
 } from 'antd';
 import { DownloadOutlined, PlusOutlined } from '@ant-design/icons';
 import { useMissionStore } from '../stores/missionStore';
 import { useWaypointStore } from '../stores/waypointStore';
 import { useAssetStore } from '../stores/assetStore';
+import { useSortieStore } from '../stores/sortieStore';
 import AssetGrid from '../components/common/AssetGrid';
 import AmapRouteView from '../components/common/AmapRouteView';
 import { IMAGE_QUALITIES, type ImageAsset, type ImageAssetDraft, type ImageQuality } from '../types/imageasset';
 import { calcGsd, distanceMeters } from '../utils/geoCalc';
+import { reconcileSorties, type ReconciledSortie } from '../utils/sortieCalc';
+
+type SortieRow = ReconciledSortie;
 
 /** /missions/:id/assets 成果影像编目：格子列出片号/缩略图/GSD/质量，多选标记、定位到图 */
 export default function AssetCatalog() {
@@ -32,6 +38,7 @@ export default function AssetCatalog() {
   const addMany = useAssetStore((s) => s.addMany);
   const markMany = useAssetStore((s) => s.markMany);
   const removeMany = useAssetStore((s) => s.removeMany);
+  const sorties = useSortieStore((s) => s.items);
 
   const mission = missions.find((m) => m.id === id);
   const missionAssets = useMemo(
@@ -42,6 +49,8 @@ export default function AssetCatalog() {
     () => waypoints.filter((w) => w.missionId === id).sort((a, b) => a.seq - b.seq),
     [waypoints, id],
   );
+  const missionSorties = useMemo(() => sorties.filter((s) => s.missionId === id), [sorties, id]);
+  const assignAndReconcile = useSortieStore((s) => s.assignAndReconcile);
 
   const [selected, setSelected] = useState<string[]>([]);
   const [keyword, setKeyword] = useState('');
@@ -56,6 +65,13 @@ export default function AssetCatalog() {
     return () => window.clearTimeout(timer);
   }, [toast]);
 
+  // 进入页面时按航点范围对账一次
+  useEffect(() => {
+    if (!id || missionSorties.length === 0) return;
+    void assignAndReconcile(id, missionWaypoints, missionAssets);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id, missionSorties.length]);
+
   const filtered = missionAssets.filter((a) => {
     if (qualityFilter !== 'all' && a.quality !== qualityFilter) return false;
     if (keyword && !a.imageNo.toLowerCase().includes(keyword.trim().toLowerCase())) return false;
@@ -66,6 +82,38 @@ export default function AssetCatalog() {
     quality,
     count: missionAssets.filter((a) => a.quality === quality).length,
   }));
+
+  const reconciledSorties = useMemo(
+    () => reconcileSorties(missionSorties, missionWaypoints, missionAssets),
+    [missionSorties, missionWaypoints, missionAssets],
+  );
+  const pendingReview = useMemo(() => missionAssets.filter((a) => a.needsReview), [missionAssets]);
+  const missedCount = reconciledSorties.filter((s) => s.status === '漏拍').length;
+
+  const sortieColumns: NonNullable<TableProps<SortieRow>['columns']> = [
+    { title: '架次', dataIndex: 'sortieNo', width: 70, render: (v: number) => `第 ${v} 架次` },
+    {
+      title: '航点范围',
+      width: 130,
+      render: (_: unknown, row: SortieRow) => (row.fromSeq > 0 ? `#${row.fromSeq} ~ #${row.toSeq}` : '—'),
+    },
+    { title: '预计张数', dataIndex: 'estPhotos', width: 90 },
+    { title: '实际张数', dataIndex: 'actualPhotos', width: 90 },
+    {
+      title: '状态',
+      dataIndex: 'status',
+      width: 90,
+      render: (v: string) => {
+        const color = v === '已飞' ? 'green' : v === '漏拍' ? 'red' : 'default';
+        return <Tag color={color}>{v}</Tag>;
+      },
+    },
+    {
+      title: '漏拍航点',
+      dataIndex: 'missedSeqs',
+      render: (seqs: number[]) => (seqs.length > 0 ? seqs.map((s) => `#${s}`).join('、') : '—'),
+    },
+  ];
 
   /** 批量编目：按航点位置与当前航线 GSD 生成影像条目 */
   const catalogFromWaypoints = async () => {
@@ -89,7 +137,11 @@ export default function AssetCatalog() {
       quality: '合格' as ImageQuality,
       folder: `/${mission.missionNo}/100MEDIA`,
     }));
-    await addMany(drafts);
+    const created = await addMany(drafts);
+    // 按航点范围归架并对账
+    if (missionSorties.length > 0) {
+      await assignAndReconcile(mission.id, missionWaypoints, [...missionAssets, ...created]);
+    }
     setError('');
     setToast(`已按 ${drafts.length} 个航点批量编目影像条目（GSD ${gsd} cm/px）`);
   };
@@ -110,9 +162,13 @@ export default function AssetCatalog() {
   };
 
   const exportList = () => {
-    const header = '片号,经度,纬度,航高m,GSDcm/px,重叠%,倾角°,质量,归档目录';
+    const sortieNoOf = (a: ImageAsset): number | string => {
+      const s = missionSorties.find((x) => x.id === a.sortieId);
+      return s ? s.sortieNo : '';
+    };
+    const header = '片号,经度,纬度,航高m,GSDcm/px,重叠%,倾角°,质量,架次,归档目录';
     const lines = missionAssets.map((a) =>
-      [a.imageNo, a.lng, a.lat, a.altitude, a.gsd, a.overlap, a.tiltAngle, a.quality, a.folder].join(','),
+      [a.imageNo, a.lng, a.lat, a.altitude, a.gsd, a.overlap, a.tiltAngle, a.quality, sortieNoOf(a), a.folder].join(','),
     );
     const blob = new Blob([[header, ...lines].join('\n')], { type: 'text/csv;charset=utf-8' });
     const url = URL.createObjectURL(blob);
@@ -121,7 +177,7 @@ export default function AssetCatalog() {
     a.download = `成果影像清单_${mission?.missionNo ?? 'mission'}.csv`;
     a.click();
     URL.revokeObjectURL(url);
-    setToast(`已导出 ${lines.length} 条影像清单`);
+    setToast(`已导出 ${lines.length} 条影像清单（含架次列）`);
   };
 
   if (!mission) {
@@ -156,6 +212,24 @@ export default function AssetCatalog() {
       {toast ? <Alert type="success" showIcon message={toast} closable onClose={() => setToast('')} /> : null}
       {error ? <Alert type="error" showIcon message={error} closable onClose={() => setError('')} /> : null}
 
+      {pendingReview.length > 0 ? (
+        <Alert
+          type="warning"
+          showIcon
+          message={`${pendingReview.length} 张影像待复核（架次划分已更新，请确认归属）`}
+          description={
+            <Space wrap size={6}>
+              {pendingReview.map((a) => (
+                <Tag key={a.id} color="gold">
+                  {a.imageNo}
+                  {a.reviewReason ? ` · ${a.reviewReason}` : ''}
+                </Tag>
+              ))}
+            </Space>
+          }
+        />
+      ) : null}
+
       <Row gutter={12}>
         {stats.map((s) => (
           <Col span={6} key={s.quality}>
@@ -170,6 +244,27 @@ export default function AssetCatalog() {
           </Card>
         </Col>
       </Row>
+
+      {reconciledSorties.length > 0 ? (
+        <Card
+          size="small"
+          title="架次对账"
+          extra={
+            <Space size={6}>
+              {missedCount > 0 ? <Tag color="red">漏拍 {missedCount} 个架次</Tag> : null}
+              <Tag>共 {reconciledSorties.length} 个架次</Tag>
+            </Space>
+          }
+        >
+          <Table<SortieRow>
+            rowKey="id"
+            size="small"
+            columns={sortieColumns}
+            dataSource={reconciledSorties}
+            pagination={false}
+          />
+        </Card>
+      ) : null}
 
       <Card size="small">
         <Space wrap size={10}>
@@ -245,6 +340,7 @@ export default function AssetCatalog() {
               }
               onToggleAll={(ids) => setSelected(ids)}
               onLocate={locate}
+              sortieNoOf={(a) => missionSorties.find((s) => s.id === a.sortieId)?.sortieNo ?? ''}
             />
           </Card>
         </Col>

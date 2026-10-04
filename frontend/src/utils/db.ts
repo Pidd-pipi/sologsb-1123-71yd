@@ -2,11 +2,12 @@ import Dexie, { type Table } from 'dexie';
 import type { CameraPreset, Mission } from '../types/mission';
 import type { Waypoint } from '../types/waypoint';
 import type { FlightLine } from '../types/flightline';
+import type { Sortie } from '../types/sortie';
 import { makeThumbDataUrl, type AssetThumb, type ImageAsset } from '../types/imageasset';
 import { newId } from './id';
 
 export const DB_NAME = 'gbdronemap';
-export const DB_VERSION = 2;
+export const DB_VERSION = 3;
 export const LS_VERSION_KEY = 'gbdronemap:db-version';
 
 class DroneMapDB extends Dexie {
@@ -16,6 +17,7 @@ class DroneMapDB extends Dexie {
   assets!: Table<ImageAsset, string>;
   thumbs!: Table<AssetThumb, string>;
   presets!: Table<CameraPreset, string>;
+  sorties!: Table<Sortie, string>;
 
   constructor() {
     super(DB_NAME);
@@ -55,6 +57,15 @@ class DroneMapDB extends Dexie {
             if (row.batteryCount === undefined) row.batteryCount = 1;
           });
       });
+    this.version(3).stores({
+      missions: 'id, missionNo, areaName, droneModel, flightDate, status, purpose, createdAt',
+      waypoints: 'id, missionId, seq, action, altitude',
+      lines: 'id, missionId, lineNo, updatedAt',
+      assets: 'id, missionId, imageNo, quality, shotAt, sortieId, needsReview',
+      thumbs: 'id, missionId',
+      presets: 'id, name, cameraModel',
+      sorties: 'id, missionId, sortieNo, status, invalidatedAt',
+    });
   }
 }
 
@@ -236,10 +247,18 @@ export async function ensureSeedData(): Promise<void> {
   const assets: ImageAsset[] = [];
   const thumbs: AssetThumb[] = [];
   const qualities: ImageAsset['quality'][] = ['合格', '合格', '模糊', '合格', '过曝', '合格'];
+  // 成果影像按航点位置布设（示范任务 A 的 4 个航点）
+  const assetPositions: [number, number][] = [
+    [116.3912, 39.9075],
+    [116.3978, 39.9075],
+    [116.3978, 39.9032],
+    [116.3912, 39.9032],
+    [116.3912, 39.9075],
+    [116.3978, 39.9075],
+  ];
   qualities.forEach((quality, index) => {
     const id = newId('asset');
-    const lng = 116.3916 + index * 0.0012;
-    const lat = 39.9071 - (index % 2) * 0.0009;
+    const [lng, lat] = assetPositions[index];
     assets.push({
       id,
       missionId: missionA,

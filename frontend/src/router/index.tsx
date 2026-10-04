@@ -5,6 +5,7 @@ import { RocketOutlined } from '@ant-design/icons';
 import { useMissionStore } from '../stores/missionStore';
 import { useWaypointStore } from '../stores/waypointStore';
 import { useAssetStore } from '../stores/assetStore';
+import { useSortieStore } from '../stores/sortieStore';
 import { ensureSeedData, markDbVersion, readDbVersion } from '../utils/db';
 import { hasAmapKey } from '../utils/amapLoader';
 import MissionList from '../pages/MissionList';
@@ -87,19 +88,31 @@ export default function AppRouter() {
   const loadMissions = useMissionStore((s) => s.load);
   const loadWaypoints = useWaypointStore((s) => s.load);
   const loadAssets = useAssetStore((s) => s.load);
+  const loadSorties = useSortieStore((s) => s.load);
+  const ensureLegacy = useSortieStore((s) => s.ensureLegacy);
 
   useEffect(() => {
     let alive = true;
     (async () => {
       await ensureSeedData();
       markDbVersion();
-      await Promise.all([loadMissions(), loadWaypoints(), loadAssets()]);
+      await Promise.all([loadMissions(), loadWaypoints(), loadAssets(), loadSorties()]);
+      // 旧数据兼容：有影像无架次的任务，按影像航点补架次归属
+      const state = useSortieStore.getState();
+      const missionIds = new Set(state.items.map((s) => s.missionId));
+      const assetState = useAssetStore.getState();
+      const wpState = useWaypointStore.getState();
+      for (const missionId of new Set(assetState.items.map((a) => a.missionId))) {
+        if (!missionIds.has(missionId)) {
+          await ensureLegacy(missionId, wpState.items, assetState.items);
+        }
+      }
       if (alive) setReady(true);
     })();
     return () => {
       alive = false;
     };
-  }, [loadMissions, loadWaypoints, loadAssets]);
+  }, [loadMissions, loadWaypoints, loadAssets, loadSorties, ensureLegacy]);
 
   if (!ready) {
     return (
