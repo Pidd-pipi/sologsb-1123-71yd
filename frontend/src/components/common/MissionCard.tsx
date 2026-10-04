@@ -9,6 +9,9 @@ export interface MissionCardProps {
   waypointCount?: number;
   assetCount?: number;
   lineCount?: number;
+  sortieCount?: number;
+  shortCount?: number;
+  reviewCount?: number;
   onOpen?: (id: string) => void;
   footer?: ReactNode;
 }
@@ -20,8 +23,18 @@ const STATUS_COLOR: Record<string, string> = {
   已归档: 'purple',
 };
 
-/** 任务摘要卡（编号、测区、机型、日期、航点数），被任务台账、航线规划页消费 */
-export default function MissionCard({ mission, waypointCount, assetCount, lineCount, onOpen, footer }: MissionCardProps) {
+/** 任务摘要卡（编号、测区、机型、日期、航点/架次/对账），被任务台账、航线规划页消费 */
+export default function MissionCard({
+  mission,
+  waypointCount,
+  assetCount,
+  lineCount,
+  sortieCount = 0,
+  shortCount = 0,
+  reviewCount = 0,
+  onOpen,
+  footer,
+}: MissionCardProps) {
   return (
     <Card
       size="small"
@@ -46,12 +59,18 @@ export default function MissionCard({ mission, waypointCount, assetCount, lineCo
         <Descriptions.Item label="航点">{waypointCount ?? 0} 个</Descriptions.Item>
         <Descriptions.Item label="航线">{lineCount ?? 0} 条</Descriptions.Item>
         <Descriptions.Item label="成果条目">{assetCount ?? 0} 张</Descriptions.Item>
+        <Descriptions.Item label="架次">{sortieCount} 个</Descriptions.Item>
         <Descriptions.Item label="测区面积">{polygonAreaM2(mission.areaPolygon).toFixed(0)} m²</Descriptions.Item>
         <Descriptions.Item label="飞手">{mission.pilot}</Descriptions.Item>
         <Descriptions.Item label="传感器">
           {mission.sensorWidth}×{mission.sensorHeight} mm / f{mission.focalLength} mm / {mission.pixelSize} μm
         </Descriptions.Item>
       </Descriptions>
+      <Space size={4} wrap style={{ marginTop: 6 }}>
+        {shortCount > 0 ? <Tag color="red">{shortCount} 个架次漏拍</Tag> : null}
+        {reviewCount > 0 ? <Tag color="orange">{reviewCount} 张待复核</Tag> : null}
+        {shortCount === 0 && reviewCount === 0 && sortieCount > 0 ? <Tag color="green">架次已对账</Tag> : null}
+      </Space>
       <Typography.Text type="secondary" style={{ fontSize: 12 }}>
         地图视图：{hasAmapKey() ? '高德 JS API' : '本地 SVG 网格（未配置 VITE_AMAP_KEY）'}
       </Typography.Text>

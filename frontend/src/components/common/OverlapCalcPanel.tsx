@@ -1,6 +1,7 @@
 import { Button, Card, Col, Descriptions, Divider, InputNumber, Row, Slider, Space, Statistic, Table, Tag, Typography, type TableProps } from 'antd';
 import { SaveOutlined } from '@ant-design/icons';
 import type { RouteMetrics, RouteParams } from '../../hooks/useRouteMetrics';
+import type { PlannedSortieSeed } from '../../types/sortie';
 
 export interface OverlapCalcPanelProps {
   params: RouteParams;
@@ -8,21 +9,27 @@ export interface OverlapCalcPanelProps {
   metrics: RouteMetrics;
   onSave?: () => void;
   savedText?: string;
+  /** 保存提示：已编目架次保留、未飞重算、受影响影像列待复核 */
+  saveHint?: string;
 }
 
-type SortieRow = { sortie: number; photos: number; durationMin: number };
-
-const columns: NonNullable<TableProps<SortieRow>['columns']> = [
-  { title: '架次', dataIndex: 'sortie', width: 70, render: (v: number) => `第 ${v} 架次` },
-  { title: '预计张数', dataIndex: 'photos', width: 100 },
-  { title: '预计耗时 min', dataIndex: 'durationMin', width: 120 },
+const columns: NonNullable<TableProps<PlannedSortieSeed>['columns']> = [
+  { title: '架次', dataIndex: 'sortieNo', width: 70, render: (v: number) => `第 ${v} 架次` },
+  {
+    title: '航点范围',
+    key: 'range',
+    width: 110,
+    render: (_: unknown, row: PlannedSortieSeed) => `#${row.wpStartSeq} ~ #${row.wpEndSeq}`,
+  },
+  { title: '预计张数', dataIndex: 'estPhotos', width: 90 },
+  { title: '预计耗时 min', dataIndex: 'estDurationMin', width: 110 },
 ];
 
 /**
  * 重叠率 / 航高 / 航速表单与 GSD、航线间距、预计张数的实时回算面板。
  * 被航线规划页（/missions/:id/route）与相机预设页（/settings/camera）消费。
  */
-export default function OverlapCalcPanel({ params, onChange, metrics, onSave, savedText }: OverlapCalcPanelProps) {
+export default function OverlapCalcPanel({ params, onChange, metrics, onSave, savedText, saveHint }: OverlapCalcPanelProps) {
   return (
     <Space direction="vertical" size={12} style={{ width: '100%' }} data-testid="overlap-calc-panel">
       <Card size="small" title="航线参数">
@@ -65,11 +72,18 @@ export default function OverlapCalcPanel({ params, onChange, metrics, onSave, sa
         {onSave ? (
           <>
             <Divider style={{ margin: '10px 0' }} />
-            <Space>
-              <Button type="primary" icon={<SaveOutlined />} onClick={onSave}>
-                保存航线参数
-              </Button>
-              {savedText ? <Typography.Text type="secondary">{savedText}</Typography.Text> : null}
+            <Space direction="vertical" size={4}>
+              <Space>
+                <Button type="primary" icon={<SaveOutlined />} onClick={onSave}>
+                  保存航线参数并分架次
+                </Button>
+                {savedText ? <Typography.Text type="secondary">{savedText}</Typography.Text> : null}
+              </Space>
+              {saveHint ? (
+                <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                  {saveHint}
+                </Typography.Text>
+              ) : null}
             </Space>
           </>
         ) : null}
@@ -107,21 +121,21 @@ export default function OverlapCalcPanel({ params, onChange, metrics, onSave, sa
         </Descriptions>
         <div style={{ marginTop: 6 }}>
           {metrics.sorties.map((s) => (
-            <Tag key={s.sortie} color="blue">
-              第 {s.sortie} 架次 · {s.photos} 张 · {s.durationMin} min
+            <Tag key={s.sortieNo} color="blue">
+              第 {s.sortieNo} 架次 · #{s.wpStartSeq}~#{s.wpEndSeq} · {s.estPhotos} 张 · {s.estDurationMin} min
             </Tag>
           ))}
         </div>
       </Card>
 
-      <Card size="small" title="多架次拆分">
-        <Table<SortieRow>
-          rowKey="sortie"
+      <Card size="small" title="按续航分架次（航点范围 + 预计张数）">
+        <Table<PlannedSortieSeed>
+          rowKey="sortieNo"
           size="small"
           columns={columns}
           dataSource={metrics.sorties}
           pagination={false}
-          locale={{ emptyText: '暂无架次拆分' }}
+          locale={{ emptyText: '暂无航点，保存后再分架次' }}
         />
       </Card>
     </Space>

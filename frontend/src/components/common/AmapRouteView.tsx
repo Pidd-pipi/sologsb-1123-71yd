@@ -16,6 +16,8 @@ export interface AmapRouteViewProps {
   onPickPoint?: (lng: number, lat: number) => void;
   /** 高亮的航点序号（例如从成果编目页「定位到图」） */
   highlightSeq?: number;
+  /** 漏拍航点序号：红圈常驻提示 */
+  dangerSeqs?: number[];
   /** 航点标注（用于单点视场预览） */
   withFov?: boolean;
 }
@@ -34,6 +36,7 @@ export default function AmapRouteView({
   height = 420,
   onPickPoint,
   highlightSeq,
+  dangerSeqs,
   withFov = true,
 }: AmapRouteViewProps) {
   const [amap, setAmap] = useState<AMapNamespace | null>(null);
@@ -258,11 +261,17 @@ export default function AmapRouteView({
         {waypoints.map((w) => {
           const p = projection.projector.toXY([w.lng, w.lat]);
           const active = w.seq === highlightSeq;
+          const danger = dangerSeqs?.includes(w.seq) ?? false;
+          const fill = active ? '#d93025' : danger ? '#fa541c' : '#1d3557';
           return (
             <g key={w.id}>
-              <circle cx={p.x} cy={p.y} r={active ? 8 : 5} fill={active ? '#d93025' : '#1d3557'} />
-              <text x={p.x + 9} y={p.y - 6} fontSize="11" fill="#3c4652">
+              {danger ? (
+                <circle cx={p.x} cy={p.y} r={10} fill="none" stroke="#fa541c" strokeWidth={1.5} strokeDasharray="3 2" />
+              ) : null}
+              <circle cx={p.x} cy={p.y} r={active || danger ? 8 : 5} fill={fill} />
+              <text x={p.x + 9} y={p.y - 6} fontSize="11" fill={danger ? '#d4380d' : '#3c4652'}>
                 #{w.seq} {w.altitude}m {w.action}
+                {danger ? ' 漏拍' : ''}
               </text>
             </g>
           );

@@ -23,6 +23,12 @@ export interface ImageAsset {
   quality: ImageQuality;
   /** 归档目录 */
   folder: string;
+  /** 按航点编目时对应的航点 id（旧数据可为空，按坐标就近匹配） */
+  waypointId?: string;
+  /** 归属架次 id（旧数据可为空，按航点区间补归属） */
+  sortieId?: string;
+  /** 参数重算后归属受影响，列入待复核 */
+  needsReview?: boolean;
 }
 
 export type ImageAssetDraft = Omit<ImageAsset, 'id'>;

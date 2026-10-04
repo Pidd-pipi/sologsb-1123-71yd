@@ -2,6 +2,8 @@ import { useMemo, useState } from 'react';
 import { useMissionStore } from '../stores/missionStore';
 import { useWaypointStore } from '../stores/waypointStore';
 import { useAssetStore } from '../stores/assetStore';
+import { useSortieStore } from '../stores/sortieStore';
+import { reconcileSorties } from '../utils/sortieReconcile';
 import type { Mission, MissionStatus } from '../types/mission';
 
 export interface MissionFilters {
@@ -28,6 +30,9 @@ export interface MissionRow {
   mission: Mission;
   waypointCount: number;
   assetCount: number;
+  sortieCount: number;
+  shortCount: number;
+  reviewCount: number;
 }
 
 /**
@@ -39,6 +44,7 @@ export function useMissionFilter(initial?: Partial<MissionFilters>) {
   const loaded = useMissionStore((s) => s.loaded);
   const waypoints = useWaypointStore((s) => s.items);
   const assets = useAssetStore((s) => s.items);
+  const sorties = useSortieStore((s) => s.items);
 
   const [filters, setFilters] = useState<MissionFilters>({ ...DEFAULT_MISSION_FILTERS, ...initial });
 
@@ -69,11 +75,20 @@ export function useMissionFilter(initial?: Partial<MissionFilters>) {
         }
         return true;
       })
-      .map((mission) => ({
-        mission,
-        waypointCount: waypoints.filter((w) => w.missionId === mission.id).length,
-        assetCount: assets.filter((a) => a.missionId === mission.id).length,
-      }));
+      .map((mission) => {
+        const mWaypoints = waypoints.filter((w) => w.missionId === mission.id);
+        const mAssets = assets.filter((a) => a.missionId === mission.id);
+        const mSorties = sorties.filter((s) => s.missionId === mission.id);
+        const { rows } = reconcileSorties(mSorties, mWaypoints, mAssets);
+        return {
+          mission,
+          waypointCount: mWaypoints.length,
+          assetCount: mAssets.length,
+          sortieCount: mSorties.length,
+          shortCount: rows.filter((r) => r.status === 'short').length,
+          reviewCount: mAssets.filter((a) => a.needsReview).length,
+        };
+      });
     const sorted = [...rows];
     sorted.sort((a, b) => {
       if (filters.sortBy === 'missionNo') return a.mission.missionNo.localeCompare(b.mission.missionNo);
@@ -81,7 +96,7 @@ export function useMissionFilter(initial?: Partial<MissionFilters>) {
       return b.mission.createdAt - a.mission.createdAt;
     });
     return sorted;
-  }, [missions, waypoints, assets, filters]);
+  }, [missions, waypoints, assets, sorties, filters]);
 
   const patch = (p: Partial<MissionFilters>) => setFilters((prev) => ({ ...prev, ...p }));
 

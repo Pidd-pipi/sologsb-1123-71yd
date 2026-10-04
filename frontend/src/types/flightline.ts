@@ -22,6 +22,12 @@ export interface FlightLine {
   batteryCount: number;
   /** 航带方向 ° */
   heading: number;
+  /** 保存时采用的相对航高 m（用于航高变化判定） */
+  altitude?: number;
+  /** 保存时采用的航速 m/s */
+  speed?: number;
+  /** 航线参数签名：航高/重叠率变化后与当前参数不一致即失效 */
+  paramsSig?: string;
   updatedAt: number;
 }
 

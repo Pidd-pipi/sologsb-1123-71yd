@@ -1,5 +1,5 @@
-import { Button, Card, Checkbox, Empty, Space, Tag, Typography } from 'antd';
-import { AimOutlined } from '@ant-design/icons';
+import { Button, Card, Checkbox, Empty, Space, Tag, Tooltip, Typography } from 'antd';
+import { AimOutlined, WarningOutlined } from '@ant-design/icons';
 import type { ImageAsset, ImageQuality } from '../../types/imageasset';
 
 export interface AssetGridProps {
@@ -10,6 +10,8 @@ export interface AssetGridProps {
   onToggleAll?: (ids: string[]) => void;
   onLocate?: (asset: ImageAsset) => void;
   emptyText?: string;
+  /** 影像 id → 「第 n 架次 / #航点」标签 */
+  resolveLabel?: (asset: ImageAsset) => { sortieNo?: number; wpSeq?: number } | undefined;
 }
 
 const QUALITY_COLOR: Record<ImageQuality, string> = {
@@ -30,6 +32,7 @@ export default function AssetGrid({
   onToggleAll,
   onLocate,
   emptyText = '暂无成果影像条目',
+  resolveLabel,
 }: AssetGridProps) {
   if (assets.length === 0) {
     return <Empty description={emptyText} />;
@@ -58,12 +61,13 @@ export default function AssetGrid({
       >
         {assets.map((asset) => {
           const selected = selectedIds.includes(asset.id);
+          const label = resolveLabel?.(asset);
           return (
             <Card
               key={asset.id}
               size="small"
               hoverable
-              style={{ borderColor: selected ? '#1677ff' : undefined }}
+              style={{ borderColor: asset.needsReview ? '#d48806' : selected ? '#1677ff' : undefined }}
               styles={{ body: { padding: 8 } }}
             >
               <div style={{ position: 'relative' }}>
@@ -75,13 +79,25 @@ export default function AssetGrid({
                 <div style={{ position: 'absolute', top: 4, left: 4 }}>
                   <Checkbox checked={selected} onChange={() => onToggle(asset.id)} />
                 </div>
-                <div style={{ position: 'absolute', top: 4, right: 4 }}>
+                <div style={{ position: 'absolute', top: 4, right: 4, display: 'flex', gap: 4 }}>
+                  {asset.needsReview ? (
+                    <Tooltip title="航线参数重算后归属受影响，待复核">
+                      <Tag icon={<WarningOutlined />} color="orange" style={{ marginInlineEnd: 0 }}>
+                        待复核
+                      </Tag>
+                    </Tooltip>
+                  ) : null}
                   <Tag color={QUALITY_COLOR[asset.quality]}>{asset.quality}</Tag>
                 </div>
               </div>
               <Typography.Text strong style={{ display: 'block', marginTop: 6 }}>
                 {asset.imageNo}
               </Typography.Text>
+              <Space size={4} wrap style={{ marginTop: 2 }}>
+                {label?.sortieNo !== undefined ? <Tag color="geekblue">第 {label.sortieNo} 架次</Tag> : null}
+                {label?.wpSeq !== undefined ? <Tag color="blue">#{label.wpSeq} 航点</Tag> : null}
+                {!label?.sortieNo && !label?.wpSeq ? <Tag>未归架次</Tag> : null}
+              </Space>
               <Typography.Text type="secondary" style={{ fontSize: 12, display: 'block' }}>
                 GSD {asset.gsd} cm/px · 重叠 {asset.overlap}% · 倾角 {asset.tiltAngle}°
               </Typography.Text>

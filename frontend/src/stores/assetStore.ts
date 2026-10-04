@@ -3,14 +3,25 @@ import { db } from '../utils/db';
 import { newId } from '../utils/id';
 import { makeThumbDataUrl, type AssetThumb, type ImageAsset, type ImageAssetDraft, type ImageQuality } from '../types/imageasset';
 
+/** 编目时随影像一并落库的架次归属 */
+export interface AssetRefs {
+  waypointId?: string;
+  sortieId?: string;
+  needsReview?: boolean;
+}
+
 interface AssetState {
   items: ImageAsset[];
   thumbs: Record<string, string>;
   loaded: boolean;
   load: () => Promise<void>;
-  addMany: (drafts: ImageAssetDraft[]) => Promise<ImageAsset[]>;
+  refresh: () => Promise<void>;
+  addMany: (drafts: ImageAssetDraft[], refs?: (AssetRefs | undefined)[]) => Promise<ImageAsset[]>;
   update: (id: string, patch: Partial<ImageAsset>) => Promise<void>;
   markMany: (ids: string[], quality: ImageQuality) => Promise<void>;
+  clearReview: (ids: string[]) => Promise<void>;
+  /** 架次重算/旧数据补录后，把归属与待复核补丁同步进内存 */
+  applyPatches: (patches: { id: string; patch: Partial<ImageAsset> }[]) => void;
   removeMany: (ids: string[]) => Promise<void>;
   byMission: (missionId: string) => ImageAsset[];
   qualityStats: (missionId: string) => { quality: ImageQuality; count: number }[];
@@ -30,8 +41,13 @@ export const useAssetStore = create<AssetState>((set, get) => ({
     });
     set({ items: rows, thumbs, loaded: true });
   },
-  async addMany(drafts) {
-    const records: ImageAsset[] = drafts.map((d) => ({ ...d, id: newId('asset') }));
+  async refresh() {
+    const rows = await db.assets.toArray();
+    rows.sort((a, b) => a.imageNo.localeCompare(b.imageNo, 'zh-Hans-CN', { numeric: true }));
+    set({ items: rows });
+  },
+  async addMany(drafts, refs) {
+    const records: ImageAsset[] = drafts.map((d, i) => ({ ...d, id: newId('asset'), ...(refs?.[i] ?? {}) }));
     const thumbRecords: AssetThumb[] = records.map((r) => ({
       id: r.id,
       missionId: r.missionId,
@@ -56,6 +72,16 @@ export const useAssetStore = create<AssetState>((set, get) => ({
       await db.assets.update(id, { quality });
     }
     set({ items: get().items.map((it) => (ids.includes(it.id) ? { ...it, quality } : it)) });
+  },
+  async clearReview(ids) {
+    for (const id of ids) {
+      await db.assets.update(id, { needsReview: false });
+    }
+    set({ items: get().items.map((it) => (ids.includes(it.id) ? { ...it, needsReview: false } : it)) });
+  },
+  applyPatches(patches) {
+    const map = new Map(patches.map((p) => [p.id, p.patch]));
+    set({ items: get().items.map((it) => (map.has(it.id) ? { ...it, ...map.get(it.id) } : it)) });
   },
   async removeMany(ids) {
     await db.assets.bulkDelete(ids);

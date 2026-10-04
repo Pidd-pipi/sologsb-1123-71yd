@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { db } from '../utils/db';
+import { db, deleteSortiesByMission } from '../utils/db';
 import { newId } from '../utils/id';
 import type { CameraPreset, Mission, MissionDraft, MissionStatus } from '../types/mission';
 
@@ -61,6 +61,8 @@ export const useMissionStore = create<MissionState>((set, get) => ({
     set({ presets: get().presets.filter((p) => p.id !== id) });
   },
   async remove(id) {
+    // 连同该任务的架次一并删除（航点/影像保持原有删除策略）
+    await deleteSortiesByMission(id);
     await db.missions.delete(id);
     set({ items: get().items.filter((it) => it.id !== id) });
   },
